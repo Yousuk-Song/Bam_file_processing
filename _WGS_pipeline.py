@@ -67,6 +67,15 @@ def index(bam, thread):
 	index_command = [samtools, 'index', '-@', str(thread), bam]
 	os.system(' '.join(index_command))
 
+def base_recalibration(bam):
+    recalibrated_bam = bam.replace('.dedupped.bam', '.recalibrated.bam')
+    recalibration_report = bam.replace('.dedupped.bam', '_recal_data.table')
+    recalibration_command = [gatk, 'BaseRecalibrator', '-R', ref, '-I', bam, '-O', recalibration_report]
+    os.system(' '.join(recalibration_command))
+    
+    apply_recalibration_command = [gatk, 'ApplyBQSR', '-R', ref, '-I', bam, '--bqsr-recal-file', recalibration_report, '-O', recalibrated_bam]
+    os.system(' '.join(apply_recalibration_command))
+
 def markdup(bam):
 	markdup_command = [gatk, 'MarkDuplicates', '-I', bam, '-O', bam.replace('.sort.bam', '.dedupped.bam'), '--METRICS_FILE', bam.replace('.sort.bam', '_metrics.txt'), '--REMOVE_DUPLICATES true']
 	os.system(' '.join(markdup_command))
@@ -108,6 +117,14 @@ if __name__ == '__main__':
 	# index
 	process1 = mp.Process(target=index, args=(sorted_normal_bam, thread))       
 	process2 = mp.Process(target=index, args=(sorted_tumor_bam, thread))       
+	process1.start()
+	process2.start()
+	for process in mp.active_children():
+		process.join()
+
+	# Base recalibration
+	process1 = mp.Process(target=base_recalibration, args=(dedupped_normal_bam,))
+	process2 = mp.Process(target=base_recalibration, args=(dedupped_tumor_bam,))
 	process1.start()
 	process2.start()
 	for process in mp.active_children():
